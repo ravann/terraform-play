@@ -67,20 +67,17 @@ module "security_group" {
       description = "Aurora access from within VPC"
       cidr_blocks = module.vpc.vpc_cidr_block
     },
+    {
+      rule = "postgresql-tcp"
+      description = "Aurora access from workspaces"
+      cidr_blocks = "172.16.0.0/16"
+    }
   ]
 
   tags = local.tags
 }
 
-resource "time_sleep" "wait_60_seconds_destroy" {
-  depends_on = [module.security_group]
-
-  destroy_duration = "60s"
-}
-
 resource "aws_rds_cluster_parameter_group" "aurora-poc" {
-  depends_on = [time_sleep.wait_60_seconds_destroy]
-
   name        = "${local.name}-pg"
   family      = "aurora-postgresql12"
   description = "RDS cluster parameter group"
@@ -122,15 +119,7 @@ output "subnets" {
   value = module.vpc.database_subnets
 }
 
-resource "time_sleep" "wait_60_seconds_create" {
-  depends_on = [aws_rds_cluster_parameter_group.aurora-poc]
-
-  create_duration = "60s"
-}
-
 module "cluster" {
-  depends_on = [time_sleep.wait_60_seconds_create]
-
   source  = "terraform-aws-modules/rds-aurora/aws"
 
   name           = local.name
@@ -157,7 +146,11 @@ module "cluster" {
   db_cluster_parameter_group_name = "${local.name}-pg"
 
   enabled_cloudwatch_logs_exports = ["postgresql"]
-  
+
+  master_username   = var.db_username
+  master_password	  = var.db_password
+
+  skip_final_snapshot	= true
 
   tags = local.tags
 }

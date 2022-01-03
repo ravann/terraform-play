@@ -17,6 +17,9 @@
 # SSH Keys
 *.pem
 
+# tfvars
+*.tfvars
+
 # Backup files
 *.bak
 

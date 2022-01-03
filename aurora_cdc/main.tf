@@ -43,6 +43,13 @@ module "vpc" {
   tags = local.tags
 }
 
+resource "aws_db_subnet_group" "aurora_subnet_group" {
+    name       = "${local.name}-sg"
+    subnet_ids = module.vpc.database_subnets
+
+    tags = local.tags
+}
+
 module "security_group" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 4"
@@ -65,32 +72,63 @@ module "security_group" {
   tags = local.tags
 }
 
+resource "aws_rds_cluster_parameter_group" "aurora-poc" {
+  name        = "${local.name}-pg"
+  family      = "aurora5.6"
+  description = "RDS cluster parameter group"
+
+  parameter {
+    name  = "character_set_server"
+    value = "utf8"
+  }
+
+  parameter {
+    name  = "character_set_client"
+    value = "utf8"
+  }
+
+}
+
+output "vpc" {
+  value = module.vpc.vpc_id
+}
+
+output "security_group" {
+  value = module.security_group.security_group_id
+}
+
+output "subnets" {
+  value = module.vpc.database_subnets
+}
+
 module "cluster" {
   source  = "terraform-aws-modules/rds-aurora/aws"
 
   name           = local.name
   engine         = "aurora-postgresql"
-  engine_version = "11.12"
+  engine_version = "12.7"
   instance_class = "db.r6g.large"
-  create_cluster = false
+  instances = {
+    poc = {}
+  }
 
   vpc_id  = module.vpc.vpc_id
-  db_subnet_group_name = module.vpc.database_subnet_group_name
+  vpc_security_group_ids = [module.security_group.security_group_id]
+  subnets = module.vpc.database_subnets
+  db_subnet_group_name = aws_db_subnet_group.aurora_subnet_group.name
   create_db_subnet_group = false
 
-  create_security_group = false
-  allowed_security_groups = [module.security_group.security_group_id]
-  allowed_cidr_blocks     = module.vpc.private_subnets_cidr_blocks
+  # allowed_security_groups = [module.security_group.security_group_id]
 
   storage_encrypted   = true
   apply_immediately   = true
   monitoring_interval = 10
 
-  db_parameter_group_name         = "default"
-  db_cluster_parameter_group_name = "default"
+  # db_parameter_group_name         = "default"
+  # db_cluster_parameter_group_name = "${local.name}-pg"
 
   enabled_cloudwatch_logs_exports = ["postgresql"]
+  
 
   tags = local.tags
 }
-

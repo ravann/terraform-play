@@ -72,21 +72,42 @@ module "security_group" {
   tags = local.tags
 }
 
+resource "time_sleep" "wait_60_seconds_destroy" {
+  depends_on = [module.security_group]
+
+  destroy_duration = "60s"
+}
+
 resource "aws_rds_cluster_parameter_group" "aurora-poc" {
+  depends_on = [time_sleep.wait_60_seconds_destroy]
+
   name        = "${local.name}-pg"
-  family      = "aurora5.6"
+  family      = "aurora-postgresql12"
   description = "RDS cluster parameter group"
 
   parameter {
-    name  = "character_set_server"
-    value = "utf8"
+    apply_method = "pending-reboot"
+    name = "rds.logical_replication"
+    value = 1
   }
 
   parameter {
-    name  = "character_set_client"
-    value = "utf8"
+    apply_method = "pending-reboot"
+    name = "max_replication_slots"
+    value = 5
   }
 
+  parameter {
+    apply_method = "pending-reboot"
+    name = "max_wal_senders"
+    value = 5
+  }
+
+  parameter {
+    apply_method = "pending-reboot"
+    name = "max_logical_replication_workers"
+    value = 5
+  }
 }
 
 output "vpc" {
@@ -101,7 +122,15 @@ output "subnets" {
   value = module.vpc.database_subnets
 }
 
+resource "time_sleep" "wait_60_seconds_create" {
+  depends_on = [aws_rds_cluster_parameter_group.aurora-poc]
+
+  create_duration = "60s"
+}
+
 module "cluster" {
+  depends_on = [time_sleep.wait_60_seconds_create]
+
   source  = "terraform-aws-modules/rds-aurora/aws"
 
   name           = local.name
@@ -125,7 +154,7 @@ module "cluster" {
   monitoring_interval = 10
 
   # db_parameter_group_name         = "default"
-  # db_cluster_parameter_group_name = "${local.name}-pg"
+  db_cluster_parameter_group_name = "${local.name}-pg"
 
   enabled_cloudwatch_logs_exports = ["postgresql"]
   
